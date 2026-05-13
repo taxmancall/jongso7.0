@@ -104,6 +104,20 @@ body{font-family:'Noto Sans KR',sans-serif;font-size:14px;background:var(--bg);c
 .rnd-method-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px}
 .rnd-method-row label{display:flex;align-items:center;gap:3px;cursor:pointer}
 .non-mintax-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;background:#e8f5e9;color:#2e7d32;border:0.5px solid #a5d6a7;font-weight:600;margin-left:4px}
+
+/* 계산 과정 패널 */
+.calc-detail-panel{background:#f9fdf6;border:0.5px solid #c8ddb8;border-radius:var(--radius);padding:10px 14px;margin-top:8px;font-size:11.5px;display:none}
+.calc-detail-panel.show{display:block}
+.calc-detail-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text2);margin-top:6px;user-select:none}
+.calc-detail-toggle:hover{color:var(--green)}
+.cd-section{margin-bottom:10px}
+.cd-title{font-size:11px;font-weight:700;color:#2e7d32;margin-bottom:5px;padding-bottom:3px;border-bottom:0.5px solid #c8ddb8}
+.cd-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:11px;color:var(--text)}
+.cd-row .cd-label{color:var(--text2);flex:1}
+.cd-row .cd-val{font-weight:600;color:#1a2b0a;white-space:nowrap;margin-left:8px}
+.cd-row .cd-formula{font-size:10px;color:var(--text3);flex:2;text-align:center}
+.cd-row.highlight{background:#e8f5e9;border-radius:3px;padding:3px 6px;margin:2px -6px}
+.cd-row.warn{background:#fff8e1;border-radius:3px;padding:3px 6px;margin:2px -6px}
 /* 추가 사업소득 */
 .extra-biz-list{margin-bottom:8px}
 .extra-biz-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;background:#f7faf2;border-radius:var(--radius);padding:6px 8px;border:0.5px solid #d4dec5}
@@ -866,7 +880,7 @@ td.refund-val{color:var(--blue)!important}
   #basicDep{font-size:8pt;border:none;background:transparent;font-weight:600;color:var(--text)}
   .apply-btn,.pending-note{display:none!important}
   .photo-zone,.mode-pill{display:none!important}
-  #shareRatioField,#hst-panel,.recalc-bar{display:none!important}
+  #shareRatioField,#hst-panel,.recalc-bar,.calc-detail-panel,.calc-detail-toggle{display:none!important}
   .parse-debug{display:none!important}
   .joint-hint.show{display:flex!important;font-size:7.5pt;padding:4px 8px;margin-bottom:4px}
   .compare-2024{box-shadow:none;break-inside:avoid;margin-bottom:8px}
@@ -1244,6 +1258,11 @@ td.refund-val{color:var(--blue)!important}
       <span id="joint-result-badge" class="joint-badge" style="display:none">공동사업 <span id="joint-result-pct">50</span>% 본인 몫</span>
       <span class="hint" style="float:right;font-weight:400">위하고 종합소득세신고서 순서</span>
     </div>
+    <div class="calc-detail-toggle" onclick="toggleCalcDetail()" id="calc-detail-toggle">
+      <i class="ti ti-calculator" style="font-size:12px"></i>
+      <span id="calc-detail-toggle-txt">임대소득 안분 계산과정 보기 ▼</span>
+    </div>
+    <div class="calc-detail-panel" id="calc-detail-panel"></div>
     <table class="rtable rtable-2col">
       <thead>
         <tr>
@@ -1765,22 +1784,23 @@ function computeOne(income,adj,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizR
   const nonMinTaxCredit=pensCredit+stdCredit+othC+(rndC||0); /* 최저한세 미적용: 연금·표준·기타·R&D (사회보험료는 최저한세 적용으로 이동) */
 
   /* 최저한세 적용 후 적용액 결정 (감면 배제 순서: 중특감면 → 통합고용 순, 조특령§126⑤) */
-  /* 최저한세 적용 대상: 중특감면, 통합고용, 고용증대, 사회보험료 (조특법§132)
-     배제 우선순위: 통합고용→고용증대→사회보험료→중특감면 (조특령§126⑤ 원칙) */
+  /* 최저한세 배제 (조특법§132, 조특령§126⑤)
+     농특세 절감 원칙: 농특세 미적용 공제(사회보험료)를 먼저 한도에 채우고,
+     나머지 한도에 농특세 적용 공제(통합고용→고용증대→중특감면) 순으로 채움
+     → 배제 순서: 통합고용 → 고용증대 → 중특감면 (사회보험료는 最後 배제) */
   const empC2Amt=empC2||0;
   const socialCAmt=socialC||0;
-  let cutSme=smeDed, cutEmpC=empC, cutEmpC2=empC2Amt, cutSocialC=socialCAmt;
   const rawTaxBiz=rawTax*bizR;
   const allowed=Math.max(0,rawTaxBiz-minTax);
-  let totalMinTaxCredit=smeDed+empC+empC2Amt+socialCAmt;
-  if(totalMinTaxCredit>allowed){
-    let cut=totalMinTaxCredit-allowed;
-    // 배제 순서: 통합고용→고용증대→사회보험료→중특감면
-    if(cut>0){const d=Math.min(cut,cutEmpC);cutEmpC-=d;cut-=d;}
-    if(cut>0){const d=Math.min(cut,cutEmpC2);cutEmpC2-=d;cut-=d;}
-    if(cut>0){const d=Math.min(cut,cutSocialC);cutSocialC-=d;cut-=d;}
-    if(cut>0){cutSme=Math.max(0,cutSme-cut);}
-  }
+  // 사회보험료(농특세 미적용)를 먼저 allowed에 배분
+  const cutSocialC=Math.min(socialCAmt,allowed);
+  const remainAfterSocial=Math.max(0,allowed-cutSocialC);
+  // 나머지 한도에 중특감면 먼저(감면은 공제보다 우선)
+  const cutSme=Math.min(smeDed,remainAfterSocial);
+  const remainAfterSme=Math.max(0,remainAfterSocial-cutSme);
+  // 통합고용 → 고용증대
+  const cutEmpC=Math.min(empC,remainAfterSme);
+  const cutEmpC2=Math.min(empC2Amt,Math.max(0,remainAfterSme-cutEmpC));
   const isMinTax=(cutSme<smeDed)||(cutEmpC<empC)||(cutEmpC2<empC2Amt)||(cutSocialC<socialCAmt);
   /* 결정세액 = 산출세액 - 중특감면(적용) - 통합고용(적용) - 비최저대상공제(표준·연금·기타)
      단, 결정세액은 최저한세 이상이어야 하지만 표준세액공제는 그 후 추가 차감 가능 (위하고 흐름) */
@@ -2404,6 +2424,118 @@ function highlightRecalc(){
     btn.style.background='#e65100';
     setTimeout(()=>{btn.style.background='';btn.style.animation='';},1500);
   }
+}
+
+
+/* ══ 계산 과정 패널 ══ */
+function toggleCalcDetail(){
+  const panel=document.getElementById('calc-detail-panel');
+  const btn=document.getElementById('calc-detail-toggle-txt');
+  const show=!panel.classList.contains('show');
+  panel.classList.toggle('show',show);
+  if(btn) btn.textContent=show?'계산과정 닫기 ▲':'임대소득 안분 계산과정 보기 ▼';
+  if(show) renderCalcDetail();
+}
+
+function renderCalcDetail(){
+  const panel=document.getElementById('calc-detail-panel');
+  if(!panel) return;
+  const income=lastIncome||0;
+  const rental=n('rentalInc');
+  const bizInc=income-rental;
+  const bizR=income>0?bizInc/income:1;
+  const yw_input=n('yellow');
+
+  // 노란우산 계산
+  const ylmt=yellowLmt(income);
+  const ywCapped=Math.min(yw_input,ylmt);
+  const ywApplied=Math.round(ywCapped*bizR);
+
+  // 과세표준
+  const nDep=parseInt(document.getElementById('basicDep').value)||1;
+  const elderN=parseInt(document.getElementById('elderDep').value)||0;
+  const disabledN=parseInt(document.getElementById('disabledDep').value)||0;
+  const isSingle=document.getElementById('singleParentDed').checked;
+  const isWoman=document.getElementById('womanDed').checked&&!isSingle;
+  const personalDed=nDep*1500000+elderN*1000000+disabledN*2000000+(isWoman?500000:0)+(isSingle?1000000:0);
+  const pension=n('pension');
+  const totalDed=personalDed+pension+ywApplied+n('otherD')+(typeof getOtherIncomeSum==='function'?0:0);
+  const taxBase=Math.max(0,income-totalDed);
+
+  // 산출세액
+  const rawTax=calcTax(taxBase);
+  const rawTaxBiz=rawTax*bizR;
+
+  // 최저한세
+  const taxBaseForMin=taxBase+ywApplied;
+  const rawTaxMin=calcTax(taxBaseForMin)*bizR;
+  const minTax=rawTaxMin*0.35;
+
+  // 중특감면
+  const smeR=Math.min(n('smeRate'),30)/100;
+  const smeDed=Math.min(rawTaxBiz*smeR,100000000);
+
+  // 배제 한도
+  const allowed=Math.max(0,rawTaxBiz-minTax);
+  const socialCAmt=n('socialInsC');
+  const cutSocialC=Math.min(socialCAmt,allowed);
+  const remainAfterSocial=Math.max(0,allowed-cutSocialC);
+  const cutSme=Math.min(smeDed,remainAfterSocial);
+  const empC=n('empC'), empC2=n('empC2');
+  const remainAfterSme=Math.max(0,remainAfterSocial-cutSme);
+  const cutEmpC=Math.min(empC,remainAfterSme);
+  const cutEmpC2=Math.min(empC2,Math.max(0,remainAfterSme-cutEmpC));
+  const ruralTax=Math.round((cutEmpC+cutEmpC2)*0.2);
+
+  const fmt=v=>Math.round(v).toLocaleString()+'원';
+  const pctFmt=v=>(Math.round(v*10000)/100).toFixed(2)+'%';
+
+  let html='';
+  if(rental>0){
+    html+=`<div class="cd-section">
+      <div class="cd-title">📐 소득 구성 및 안분 비율</div>
+      <div class="cd-row"><span class="cd-label">종합소득금액</span><span class="cd-formula"></span><span class="cd-val">${fmt(income)}</span></div>
+      <div class="cd-row"><span class="cd-label">ㄴ 사업소득</span><span class="cd-formula"></span><span class="cd-val">${fmt(bizInc)}</span></div>
+      <div class="cd-row"><span class="cd-label">ㄴ 임대소득</span><span class="cd-formula"></span><span class="cd-val">${fmt(rental)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">사업소득 비율 (bizR)</span><span class="cd-formula">${fmt(bizInc)} ÷ ${fmt(income)}</span><span class="cd-val">${pctFmt(bizR)}</span></div>
+    </div>`;
+
+    html+=`<div class="cd-section">
+      <div class="cd-title">🌻 노란우산공제 안분 (조특법 §86의3①)</div>
+      <div class="cd-row"><span class="cd-label">불입액</span><span class="cd-formula"></span><span class="cd-val">${fmt(yw_input)}</span></div>
+      <div class="cd-row"><span class="cd-label">한도 (종합소득 기준)</span><span class="cd-formula">yellowLmt(${fmt(income)})</span><span class="cd-val">${fmt(ylmt)}</span></div>
+      <div class="cd-row"><span class="cd-label">min(불입액, 한도)</span><span class="cd-formula">${fmt(yw_input)} vs ${fmt(ylmt)}</span><span class="cd-val">${fmt(ywCapped)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">안분 후 실 공제액</span><span class="cd-formula">${fmt(ywCapped)} × ${pctFmt(bizR)}</span><span class="cd-val">${fmt(ywApplied)}</span></div>
+    </div>`;
+
+    html+=`<div class="cd-section">
+      <div class="cd-title">🏭 중특감면 안분 (조특법 §7①)</div>
+      <div class="cd-row"><span class="cd-label">산출세액</span><span class="cd-formula"></span><span class="cd-val">${fmt(rawTax)}</span></div>
+      <div class="cd-row"><span class="cd-label">사업소득 안분 산출세액</span><span class="cd-formula">${fmt(rawTax)} × ${pctFmt(bizR)}</span><span class="cd-val">${fmt(rawTaxBiz)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">중특감면</span><span class="cd-formula">${fmt(rawTaxBiz)} × ${Math.round(smeR*100)}%</span><span class="cd-val">${fmt(smeDed)}</span></div>
+    </div>`;
+
+    html+=`<div class="cd-section">
+      <div class="cd-title">⚠️ 최저한세 계산 (조특법 §132②)</div>
+      <div class="cd-row"><span class="cd-label">최저한세 기준 과세표준</span><span class="cd-formula">taxBase + 노란우산</span><span class="cd-val">${fmt(taxBaseForMin)}</span></div>
+      <div class="cd-row"><span class="cd-label">사업소득 안분 산출세액</span><span class="cd-formula">calcTax(${fmt(taxBaseForMin)}) × ${pctFmt(bizR)}</span><span class="cd-val">${fmt(rawTaxMin)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">최저한세</span><span class="cd-formula">${fmt(rawTaxMin)} × 35%</span><span class="cd-val">${fmt(minTax)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">최저한세 배제 가능 한도</span><span class="cd-formula">${fmt(rawTaxBiz)} − ${fmt(minTax)}</span><span class="cd-val">${fmt(allowed)}</span></div>
+    </div>`;
+
+    html+=`<div class="cd-section">
+      <div class="cd-title">🌾 농특세 최소화 배분 순서</div>
+      <div class="cd-row warn"><span class="cd-label">① 사회보험료(농특세 미적용) 우선</span><span class="cd-formula">신청 ${fmt(socialCAmt)} → 한도 내</span><span class="cd-val">${fmt(cutSocialC)}</span></div>
+      <div class="cd-row"><span class="cd-label">② 중특감면</span><span class="cd-formula">잔여 ${fmt(remainAfterSocial)} 중</span><span class="cd-val">${fmt(cutSme)}</span></div>
+      <div class="cd-row"><span class="cd-label">③ 통합고용</span><span class="cd-formula">잔여 ${fmt(remainAfterSme)} 중</span><span class="cd-val">${fmt(cutEmpC)}</span></div>
+      <div class="cd-row"><span class="cd-label">④ 고용증대</span><span class="cd-formula">잔여 중</span><span class="cd-val">${fmt(cutEmpC2)}</span></div>
+      <div class="cd-row highlight"><span class="cd-label">농특세 = (통합+고용증대) × 20%</span><span class="cd-formula">(${fmt(cutEmpC)}+${fmt(cutEmpC2)}) × 20%</span><span class="cd-val">${fmt(ruralTax)}</span></div>
+    </div>`;
+  } else {
+    html='<div style="color:var(--text3);font-size:12px;padding:6px 0">임대소득 입력 시 안분 계산과정이 표시됩니다.</div>';
+  }
+
+  panel.innerHTML=html;
 }
 
 /* ══ 재계산 (임대소득·타소득 반영) ══ */
