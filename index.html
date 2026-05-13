@@ -97,6 +97,13 @@ body{font-family:'Noto Sans KR',sans-serif;font-size:14px;background:var(--bg);c
 .recalc-btn:hover{background:var(--green-dark)}
 .recalc-btn.done{background:#2e7d32}
 .recalc-badge{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;padding:2px 7px;border-radius:10px;background:#fff;border:0.5px solid #a5d6a7;font-weight:500}
+
+/* R&D 세액공제 */
+.rnd-box{background:#f3f0ff;border:0.5px solid #ce93d8;border-radius:var(--radius);padding:8px 10px;margin-bottom:8px}
+.rnd-box .rnd-title{font-size:12px;font-weight:600;color:#6a1b9a;margin-bottom:6px}
+.rnd-method-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px}
+.rnd-method-row label{display:flex;align-items:center;gap:3px;cursor:pointer}
+.non-mintax-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;background:#e8f5e9;color:#2e7d32;border:0.5px solid #a5d6a7;font-weight:600;margin-left:4px}
 /* 추가 사업소득 */
 .extra-biz-list{margin-bottom:8px}
 .extra-biz-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;background:#f7faf2;border-radius:var(--radius);padding:6px 8px;border:0.5px solid #d4dec5}
@@ -1159,6 +1166,32 @@ td.refund-val{color:var(--blue)!important}
     </div>
     <div class="hint-note">수도권 소기업 10~20% / 수도권외 30% / 중기업 10~15%&nbsp;&nbsp;<span style="color:var(--warn)">한도 1억원</span></div>
     <div class="irow"><label>통합고용세액공제 <span class="hint">(조특§29의8)</span></label><input class="num-input" id="empC" placeholder="0" oninput="fi(this);calc()"><span class="unit">원</span></div>
+    <!-- 연구인력개발세액공제 §10 - 최저한세 미적용 -->
+    <div class="rnd-box">
+      <div class="rnd-title">연구인력개발세액공제 <span class="non-mintax-badge">최저한세 미적용</span> <span class="hint">(조특법 §10②1호 중소기업)</span></div>
+      <div class="rnd-method-row">
+        <label><input type="radio" name="rndMethod" value="current" checked onchange="onRndChange()"> 당기발생액×25%</label>
+        <label><input type="radio" name="rndMethod" value="incremental" onchange="onRndChange()"> 증가방식 (증가액×50%)</label>
+      </div>
+      <div class="irow" id="rnd-current-row">
+        <label class="sub">당기 연구개발비 발생액</label>
+        <input type="text" id="rndCurrent" class="num-input" placeholder="0" oninput="fi(this);onRndChange()" style="width:130px;text-align:right">
+        <span class="unit">원</span>
+        <span class="hint" id="d_rndCredit" style="min-width:80px;text-align:right"></span>
+      </div>
+      <div class="irow" id="rnd-incr-row" style="display:none">
+        <label class="sub">직전 2년 평균 발생액</label>
+        <input type="text" id="rndPrev" class="num-input" placeholder="0" oninput="fi(this);onRndChange()" style="width:130px;text-align:right">
+        <span class="unit">원</span>
+        <span class="hint" id="d_rndCredit2" style="min-width:80px;text-align:right"></span>
+      </div>
+    </div>
+    <!-- 고용증가 사회보험료 세액공제 §30의4 - 최저한세 미적용 -->
+    <div class="irow">
+      <label>사회보험료 세액공제 <span class="non-mintax-badge">최저한세 미적용</span> <span class="hint">(조특§30의4)</span></label>
+      <input type="text" id="socialInsC" class="num-input" placeholder="0" oninput="fi(this);calc()" style="width:130px;text-align:right">
+      <span class="unit">원</span>
+    </div>
     <div class="irow"><label>연금저축·IRP 납입액 <span class="hint" id="d_pensRate">(공제율 12%)</span></label><input class="num-input" id="pensS" placeholder="0" oninput="fi(this);calc()"><span class="unit">원</span></div>
     <div class="hint-note">한도 900만원(IRP포함) · 소득 4,500만 이하 15%</div>
     <div class="irow"><label>기타 세액공제 <span class="hint">(의료비·교육비·기부금·보험료 등 직접입력)</span></label><input class="num-input" id="otherC" placeholder="0" oninput="fi(this);calc()"><span class="unit">원</span></div>
@@ -1665,7 +1698,7 @@ function pensRate(i){return i<=45000000?.15:.12}
    - 조특법 §132②(최저한세: 소득공제 전 과세표준 기준 산출세액의 35%/45%)
    - 농특세법 §4(중특감면, 사회보험료세액공제(§30의2,§30의4)는 비과세)
 */
-function computeOne(income,adj,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizRatio,laborGross,laborIncAmt,rentalAmt){
+function computeOne(income,adj,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizRatio,laborGross,laborIncAmt,rentalAmt,rndC,socialC){
   const BASE_DED=1500000;
   /* 노란우산 한도 (조특법 §86의3①):
      ① 한도 결정 = 종합소득금액 전체 기준 (임대 포함)
@@ -1724,7 +1757,7 @@ function computeOne(income,adj,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizR
      - 적용: 중특감면(§7), 통합고용공제(§29의8)
      - 비적용 (조특법 외 공제 = 최저한세 검증과 무관, 결정세액에서만 차감):
        표준세액공제(소득법§59의4), 연금저축세액공제(소득법§59의3), 기타 세액공제 */
-  const nonMinTaxCredit=pensCredit+stdCredit+othC; // 결정세액에서 별도 차감
+  const nonMinTaxCredit=pensCredit+stdCredit+othC+(rndC||0)+(socialC||0); /* 최저한세 미적용 공제: 연금·표준·기타·R&D·사회보험 */
 
   /* 최저한세 적용 후 적용액 결정 (감면 배제 순서: 중특감면 → 통합고용 순, 조특령§126⑤) */
   let cutSme=smeDed, cutEmpC=empC;
@@ -2399,6 +2432,38 @@ function doRecalc(){
   }
 }
 
+
+/* ══ 연구인력개발세액공제 (조특법 §10②1호 중소기업, 최저한세 미적용) ══ */
+function onRndChange(){
+  const method=document.querySelector('input[name="rndMethod"]:checked')?.value||'current';
+  const rndCRow=document.getElementById('rnd-current-row');
+  const rndIRow=document.getElementById('rnd-incr-row');
+  rndCRow.style.display=method==='current'?'':'none';
+  rndIRow.style.display=method==='incremental'?'':'none';
+
+  let credit=0;
+  if(method==='current'){
+    const cur=n('rndCurrent');
+    credit=Math.round(cur*0.25);
+    const el=document.getElementById('d_rndCredit');
+    if(el) el.textContent=credit>0?('→ '+credit.toLocaleString()+'원'):'';
+  } else {
+    const cur=n('rndCurrent');
+    const prev=n('rndPrev');
+    const incr=Math.max(0,cur-prev);
+    credit=Math.round(incr*0.50);
+    const el=document.getElementById('d_rndCredit2');
+    if(el) el.textContent=incr>0?('증가 '+incr.toLocaleString()+' → '+credit.toLocaleString()+'원'):'';
+  }
+  calc();
+}
+
+function getRndCredit(){
+  const method=document.querySelector('input[name="rndMethod"]:checked')?.value||'current';
+  if(method==='current') return Math.round(n('rndCurrent')*0.25);
+  return Math.round(Math.max(0,n('rndCurrent')-n('rndPrev'))*0.50);
+}
+
 /* ══ 공동사업 형태 변경 (소득세법 §43③) ══ */
 function onBizTypeChange(){
   const isJoint=document.getElementById('bizType').value==='joint';
@@ -2499,7 +2564,9 @@ function calc(){
   const laborGrossAmt=n('laborInc');
   const laborIncomeAmt=Math.max(0,laborGrossAmt-Math.min(laborIncDed(laborGrossAmt),20000000));
   const rentalAmtForCalc=n('rentalInc');
-  const B=computeOne(income,0,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizRatio,laborGrossAmt,laborIncomeAmt,rentalAmtForCalc);
+  const rndCredit=getRndCredit(); /* 연구인력개발세액공제 - 최저한세 미적용 */
+  const socialCredit=n('socialInsC'); /* 사회보험료 세액공제 - 최저한세 미적용 */
+  const B=computeOne(income,0,pen,yw_input,othD,smeR,psLimit,std,empC,othC,bizRatio,laborGrossAmt,laborIncomeAmt,rentalAmtForCalc,rndCredit,socialCredit);
   lastTot=B.tot;
   const finalPayable=B.fin+B.ruralTax-prepaid; // 차감납부(소득세+농특세 기준)
 
@@ -2601,7 +2668,7 @@ function calc(){
   if(adjApplied){
     const adjMine=Math.round(appliedAdj*lastShareRatio);const adjIncome=Math.max(0,income-adjMine);lastAdjIncome=adjIncome; /* income에 이미 타소득 포함 */
     const adjBizRatio=adjIncome>0?Math.min(1,Math.max(0,bizIncomeOnly-adjMine)/adjIncome):1;
-    const A=computeOne(adjIncome,0,pen,yw_input,othD,smeR,psLimit,std,empC,othC,adjBizRatio,laborGrossAmt,laborIncomeAmt,rentalAmtForCalc);
+    const A=computeOne(adjIncome,0,pen,yw_input,othD,smeR,psLimit,std,empC,othC,adjBizRatio,laborGrossAmt,laborIncomeAmt,rentalAmtForCalc,rndCredit,socialCredit);
     lastTotAdj=A.tot;
     const adjFinalPayable=A.fin+A.ruralTax-prepaid;
     const diff=B.tot-A.tot;lastDiff=diff;
@@ -2824,7 +2891,7 @@ function fallbackCopy(text,fb){
 
 /* ══ 초기화 ══ */
 function resetAll(){
-  ['rev','cogs','sga','nonOpInc','nonOpExp','adj','adjMinus','pension','yellow','otherD','empC','pensS','otherC','prepaid1','prepaid2','bizName','bizBirth','finInc','pensionInc','laborInc','etcInc','rentalInc']
+  ['rev','cogs','sga','nonOpInc','nonOpExp','adj','adjMinus','pension','yellow','otherD','empC','pensS','otherC','prepaid1','prepaid2','bizName','bizBirth','finInc','pensionInc','laborInc','etcInc','rentalInc','rndCurrent','rndPrev','socialInsC']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('smeRate').value='';
   document.getElementById('bizType').value='sole';document.getElementById('shareRatioField').style.display='none';document.getElementById('shareRatio').value='50';lastShareRatio=1;
