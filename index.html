@@ -960,7 +960,7 @@ td.refund-val{color:var(--blue)!important}
       <div class="irow"><label>영업외비용 <span class="hint">(이자비용 등)</span></label><input class="num-input" id="nonOpExp" placeholder="0" oninput="fi(this);calc()"><span class="unit">원</span></div>
     </div>
     <div class="divider"></div>
-    <div class="calc-row"><label>소득금액</label><span class="val green" id="d_income">0원</span></div>
+    <div class="calc-row"><label>소득금액 <span class="hint">(사업소득)</span></label><span class="val green" id="d_income">0원</span></div>
     <div class="calc-row"><label class="sub">소득율</label><span class="val green" style="font-size:13px" id="d_ratio">0.0%</span></div>
     <div class="joint-hint" id="joint-income-hint"><i class="ti ti-users"></i><span>공동사업장 소득금액(100%) <b id="d_income_full">0원</b> × <b id="d_share_pct">50</b>% = 본인 몫 <b id="d_income_mine">0원</b></span></div>
   </div>
@@ -989,7 +989,7 @@ td.refund-val{color:var(--blue)!important}
       <i class="ti ti-refresh"></i> 적용 / 재계산
     </button>
     <div class="divider"></div>
-    <div class="calc-row"><label>조정 후 소득금액 <span class="hint">(미리보기)</span></label><span class="val blue" id="d_adjIncome">0원</span></div>
+    <div class="calc-row"><label>조정 후 소득금액 <span class="hint">(사업소득 미리보기)</span></label><span class="val blue" id="d_adjIncome">0원</span></div>
     <div class="calc-row"><label class="sub">조정 후 소득율</label><span class="val blue" style="font-size:13px" id="d_adjRatio">0.0%</span></div>
     <div class="joint-hint" id="joint-adj-hint"><i class="ti ti-users"></i><span>무증빙 경비도 본인 몫(<b id="d_adj_share_pct">50</b>%) 환산 적용 → 조정 후 본인 몫 소득금액 <b id="d_adjIncome_mine">0원</b></span></div>
   </div>
@@ -2490,10 +2490,12 @@ function calc(){
   const income=Math.max(0,Math.round(incomeFull*shareRatio))+otherIncSum; /* 사업소득(본인몫)+타소득 */
   lastIncome=income;lastRev=rev*shareRatio;
 
+  /* 손익계산서 패널: 사업소득만 표시 (타소득 합산 전) */
+  const bizIncomeDisplay=Math.max(0,Math.round(incomeFull*shareRatio));
   const adjNetCalc=n('adj')-n('adjMinus');
-  const preview=Math.max(0,income-Math.round(adjNetCalc*shareRatio));
-  setDisp('d_income',income);
-  document.getElementById('d_ratio').textContent=pct(income,rev*shareRatio);
+  const preview=Math.max(0,bizIncomeDisplay-Math.round(adjNetCalc*shareRatio));
+  setDisp('d_income',bizIncomeDisplay);
+  document.getElementById('d_ratio').textContent=pct(bizIncomeDisplay,rev*shareRatio);
   setDisp('d_adjIncome',preview);
   document.getElementById('d_adjRatio').textContent=pct(preview,rev*shareRatio);
 
@@ -2504,7 +2506,7 @@ function calc(){
   if(isJoint){
     jIH.classList.add('show');jAH.classList.add('show');
     if(jBadge)jBadge.style.display='';
-    document.getElementById('d_income_full').textContent=incomeFull.toLocaleString()+'원';
+    document.getElementById('d_income_full').textContent=incomeFull.toLocaleString()+'원'; /* 사업소득 100% */
     if(otherIncSum>0)document.getElementById('d_otherIncSum').textContent=otherIncSum.toLocaleString()+'원';
     document.getElementById('d_income_mine').textContent=income.toLocaleString()+'원';
     document.getElementById('d_share_pct').textContent=shareRatioPct;
